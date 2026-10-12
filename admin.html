@@ -1,0 +1,181 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MAXO SHA CONTROL</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#242424,#080808 65%);color:#f5f5f5;font-family:Tahoma,Arial,sans-serif;display:grid;place-items:center;padding:18px}
+.wrap{width:100%;max-width:540px}
+.brand{text-align:center;margin:10px 0 25px}
+.brand b{font-size:32px;letter-spacing:6px}
+.brand p{font-size:11px;letter-spacing:4px;color:#999}
+.card{background:#111e;border:1px solid #383838;border-radius:19px;padding:23px;box-shadow:0 20px 65px #0009;backdrop-filter:blur(18px)}
+h2{font-size:17px;margin:0 0 22px}
+label{display:block;font-size:12px;color:#bbb;margin-bottom:9px}
+input:not([type=checkbox]){width:100%;background:#080808;border:1px solid #393939;border-radius:10px;padding:14px;color:white;font:inherit;outline:none}
+input:focus{border-color:#aaa}
+.field{margin:17px 0}
+button{background:#202020;color:#eee;border:1px solid #414141;border-radius:10px;padding:13px;font:inherit;cursor:pointer}
+button:hover{background:#303030}
+.primary{background:#eee;color:#090909;font-weight:bold;border-color:#eee}
+.danger{border-color:#842d2d;color:#ff7777}
+.full{width:100%}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.switchrow{padding:17px 0;border-bottom:1px solid #2b2b2b}
+.switchrow strong{font-size:13px}
+.switchrow small{display:block;color:#888;font-size:11px;margin-top:7px;line-height:1.8}
+.toggle{appearance:none;width:45px;height:25px;flex-shrink:0;background:#333;border:1px solid #555;border-radius:20px;position:relative;cursor:pointer}
+.toggle:before{content:"";position:absolute;right:3px;top:3px;width:17px;height:17px;border-radius:50%;background:#aaa;transition:.2s}
+.toggle:checked{background:#eee}
+.toggle:checked:before{right:23px;background:#111}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}
+.status{font-size:12px;color:#bbb;line-height:1.9;min-height:24px;margin-top:14px;overflow-wrap:anywhere}
+.note{font-size:11px;color:#888;line-height:1.9}
+#panel{display:none}
+.footer{text-align:center;font-size:10px;color:#666;margin-top:18px;letter-spacing:1px}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="brand">
+    <b>MAXO</b>
+    <p>SHA SECURITY CONTROL</p>
+  </header>
+
+  <section class="card" id="loginBox">
+    <h2>ورود مدیر</h2>
+    <div class="field">
+      <label for="password">رمز پنل</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Admin password">
+    </div>
+    <button class="primary full" onclick="login()">ورود به پنل</button>
+    <div class="status" id="loginStatus"></div>
+    <p class="note">اگر ADMIN_PASSWORD در Railway تنظیم نشده باشد، رمز ورود همان GitHub Token است.</p>
+  </section>
+
+  <section class="card" id="panel">
+    <div class="row">
+      <h2>تنظیمات امنیتی</h2>
+      <span class="note">MAXO ADMIN</span>
+    </div>
+
+    <div class="field">
+      <label for="sha">SHA-256 امضای APK</label>
+      <input id="sha" dir="ltr" spellcheck="false" placeholder="AA:BB:CC:...">
+      <p class="note">اثر انگشت SHA-256 را وارد کن. دونقطه‌ها اختیاری هستند.</p>
+    </div>
+
+    <div class="row switchrow">
+      <div>
+        <strong>بررسی امضا</strong>
+        <small>روشن: برنامه باید SHA ذخیره‌شده را بررسی کند.</small>
+      </div>
+      <input class="toggle" id="enabled" type="checkbox">
+    </div>
+
+    <div class="row switchrow">
+      <div>
+        <strong>خاموشی اضطراری</strong>
+        <small>روشن: برنامه باید دسترسی را متوقف کند.</small>
+      </div>
+      <input class="toggle" id="emergency" type="checkbox">
+    </div>
+
+    <div class="actions">
+      <button class="primary" onclick="save()">ذخیره تغییرات</button>
+      <button onclick="loadConfig()">بارگذاری مجدد</button>
+      <button class="danger" onclick="emergencyOn()">فعال‌سازی اضطراری</button>
+      <button onclick="logout()">خروج</button>
+    </div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <div class="footer">MAXO SECURITY • GITHUB API</div>
+</main>
+
+<script>
+async function api(url, options={}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "خطای سرور");
+  return data;
+}
+
+function message(id, text) {
+  document.getElementById(id).textContent = text;
+}
+
+async function login() {
+  message("loginStatus", "در حال بررسی...");
+  try {
+    await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        password: document.getElementById("password").value
+      })
+    });
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("panel").style.display = "block";
+    await loadConfig();
+  } catch (e) {
+    message("loginStatus", e.message);
+  }
+}
+
+async function loadConfig() {
+  message("status", "در حال دریافت تنظیمات...");
+  try {
+    const data = await api("/api/admin/config");
+    document.getElementById("sha").value = data.sha256 || "";
+    document.getElementById("enabled").checked = !!data.enabled;
+    document.getElementById("emergency").checked = !!data.emergency_stop;
+    message("status", "تنظیمات بارگذاری شد.");
+  } catch (e) {
+    message("status", e.message);
+  }
+}
+
+async function save() {
+  message("status", "در حال ذخیره در GitHub...");
+  try {
+    const data = await api("/api/admin/config", {
+      method: "POST",
+      body: JSON.stringify({
+        sha256: document.getElementById("sha").value,
+        enabled: document.getElementById("enabled").checked,
+        emergency_stop: document.getElementById("emergency").checked
+      })
+    });
+    document.getElementById("sha").value = data.config.sha256;
+    message("status", "ذخیره شد؛ تنظیمات در GitHub به‌روزرسانی شد.");
+  } catch (e) {
+    message("status", e.message);
+  }
+}
+
+async function emergencyOn() {
+  document.getElementById("emergency").checked = true;
+  await save();
+}
+
+async function logout() {
+  try {
+    await api("/api/logout", {method: "POST"});
+  } catch (_) {}
+  document.getElementById("panel").style.display = "none";
+  document.getElementById("loginBox").style.display = "block";
+  document.getElementById("password").value = "";
+  message("loginStatus", "از پنل خارج شدی.");
+}
+</script>
+</body>
+</html>
